@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/hashicorp/consul/api v1.14.0
 	github.com/wangx1n/monitor_pb v0.0.0-20220806110142-18f964f5ef05
-	google.golang.org/grpc v1.48.0
+	google.golang.org/grpc v1.49.0
 )
 
 require (
@@ -28,5 +28,3 @@ require (
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
-
-replace google.golang.org/grpc => google.golang.org/grpc v1.29.0

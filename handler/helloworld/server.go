@@ -21,82 +21,62 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"github.com/hashicorp/consul/api"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"log"
+	consulServerimport "monitor/handler/consulServer"
 	"net"
 
 	pb "github.com/wangx1n/monitor_pb/pb/helloworld"
 	"google.golang.org/grpc"
 )
 
-var (
-	port = flag.Int("port", 50051, "The server port")
+const (
+	port = ":50051"
 )
 
 // server is used to implement helloworld.GreeterServer.
-type server struct {
-	pb.UnimplementedGreeterServer
-}
+type server struct{}
 
 // SayHello implements helloworld.GreeterServer
 func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
-	log.Printf("Received: %v", in.GetName())
-	return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
+	log.Printf("Received: %v", in.Name)
+	return &pb.HelloReply{Message: "Hello " + in.Name}, nil
 }
 
-type consul struct {
-	client *api.Client
+func RegisterToConsul() {
+	consulServerimport.RegitserService("192.168.31.71:8500", &consulServerimport.ConsulService{
+		Name: "helloworld",
+		Tag:  []string{"helloworld"},
+		IP:   "192.168.31.88",
+		Port: 50051,
+	})
 }
 
-// NewConsul 连接至consul服务返回一个consul对象
-func NewConsul(addr string) (*consul, error) {
-	cfg := api.DefaultConfig()
-	cfg.Address = addr
-	c, err := api.NewClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return &consul{c}, nil
+//health
+type HealthImpl struct{}
+
+// Check 实现健康检查接口，这里直接返回健康状态，这里也可以有更复杂的健康检查策略，比如根据服务器负载来返回
+func (h *HealthImpl) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
+	fmt.Print("health checking\n")
+	return &grpc_health_v1.HealthCheckResponse{
+		Status: grpc_health_v1.HealthCheckResponse_SERVING,
+	}, nil
 }
 
-// RegisterService 将gRPC服务注册到consul
-func (c *consul) RegisterService(serviceName string, ip string, port int) error {
-	srv := &api.AgentServiceRegistration{
-		ID:      fmt.Sprintf("%s-%s-%d", serviceName, ip, port), // 服务唯一ID
-		Name:    serviceName,                                    // 服务名称
-		Tags:    []string{"q1mi", "hello"},                      // 为服务打标签
-		Address: ip,
-		Port:    port,
-	}
-	return c.client.Agent().ServiceRegister(srv)
-}
-
-// GetOutboundIP 获取本机的出口IP
-func GetOutboundIP() (net.IP, error) {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP, nil
+func (h *HealthImpl) Watch(req *grpc_health_v1.HealthCheckRequest, w grpc_health_v1.Health_WatchServer) error {
+	return nil
 }
 
 func main() {
-	consul, err := NewConsul("192.168.31.71:8500")
-
-	consul.RegisterService("helloworld", "192.168.31.71", 50051)
-
-	flag.Parse()
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
 	pb.RegisterGreeterServer(s, &server{})
-	log.Printf("server listening at %v", lis.Addr())
+	grpc_health_v1.RegisterHealthServer(s, &HealthImpl{})
+	RegisterToConsul()
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
