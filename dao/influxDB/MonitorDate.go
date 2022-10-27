@@ -1,0 +1,5 @@
+package influxDB
+
+func Insert() {
+
+}
